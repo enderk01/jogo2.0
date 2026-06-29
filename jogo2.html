@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RPG de IA - Crônicas 777</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #121212;
+      color: #e0e0e0;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #status-bar {
+      background-color: #1e1e1e;
+      padding: 12px;
+      text-align: center;
+      font-weight: bold;
+      color: #ffb74d;
+      border-bottom: 2px solid #2d2d2d;
+      font-size: 14px;
+    }
+    #game-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+    #control-sidebar {
+      flex: 1;
+      max-width: 300px;
+      background-color: #0a0a0a;
+      border-right: 2px solid #2d2d2d;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      overflow-y: auto;
+    }
+    #narrative-screen {
+      flex: 3;
+      display: flex;
+      flex-direction: column;
+      background-color: #151515;
+    }
+    #text-stream {
+      flex: 1;
+      padding: 25px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+    .text-block {
+      padding: 12px 18px;
+      border-radius: 8px;
+      max-width: 80%;
+      word-wrap: break-word;
+    }
+    .user-entry {
+      background-color: #0b5ed7;
+      color: #fff;
+      align-self: flex-end;
+    }
+    .ai-entry {
+      background-color: #222;
+      color: #e0e0e0;
+      align-self: flex-start;
+      border-left: 4px solid #0dcaf0;
+    }
+    #input-bar {
+      padding: 20px;
+      background-color: #1a1a1a;
+      border-top: 2px solid #2d2d2d;
+      display: flex;
+      gap: 12px;
+    }
+    textarea {
+      flex: 1;
+      height: 50px;
+      background-color: #2b2b2b;
+      border: 1px solid #444;
+      color: #fff;
+      padding: 10px;
+      border-radius: 6px;
+      resize: none;
+      font-family: inherit;
+      font-size: 15px;
+      outline: none;
+    }
+    button {
+      padding: 10px 24px;
+      background-color: #198754;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    button:disabled {
+      background-color: #3a3a3a;
+      color: #777;
+      cursor: not-allowed;
+    }
+    .box-card {
+      background-color: #181818;
+      padding: 15px;
+      border-radius: 6px;
+      border: 1px solid #2d2d2d;
+    }
+    h3 { margin-top: 0; color: #0dcaf0; font-size: 14px; text-transform: uppercase; border-bottom: 1px solid #333; padding-bottom: 5px; }
+    ul { padding-left: 15px; margin: 10px 0 0 0; font-size: 13px; color: #aaa; }
+  </style>
+</head>
+<body>
+
+  <div id="status-bar">
+    🔮 Conexão Mental 777: <span id="status-info">Iniciando sistema neural offline...</span>
+  </div>
+
+  <div id="game-container">
+    <div id="control-sidebar">
+      <div class="box-card">
+        <h3>ℹ️ Painel Auxiliar</h3>
+        <p style="font-size: 12px; color: #888; margin: 5px 0;">Sua IA local aprende traços da história em tempo real.</p>
+      </div>
+      <div class="box-card">
+        <h3>🧠 Banco de Memórias</h3>
+        <ul id="memory-list">
+          <li>Nenhum registro na mente limpa ainda.</li>
+        </ul>
+      </div>
+      <div class="box-card">
+        <h3>💾 Arquivos de Jogo</h3>
+        <button onclick="window.backupCompleto()" style="width: 100%; margin-bottom: 8px; background-color: #495057;">Exportar Tudo (.json)</button>
+        <input type="file" id="load-file" onchange="window.restaurarBackup(this)" style="display: none;">
+        <button onclick="document.getElementById('load-file').click()" style="width: 100%; background-color: #343a40;">Importar Tudo</button>
+      </div>
+    </div>
+
+    <div id="narrative-screen">
+      <div id="text-stream">
+        <div class="text-block ai-entry">O portal do código 777 se abre. A IA offline está se acoplando ao cache do navegador para dar início à sua campanha sem restrições. Qual será o seu primeiro passo neste mundo?</div>
+      </div>
+      <div id="input-bar">
+        <textarea id="user-action" placeholder="Escreva o rumo da sua história aqui..." disabled></textarea>
+        <button id="send-action" onclick="window.executarAcao()" disabled>Avançar</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { pipeline } from 'https://jsdelivr.net';
+
+    let localState = JSON.parse(localStorage.getItem('rpg_777_save')) || {
+      chat: [{ type: 'ai', text: 'O portal do código 777 se abre. A IA offline está se acoplando ao cache do navegador para dar início à sua campanha sem restrições. Qual será o seu primeiro passo neste mundo?' }],
+      memoria: []
+    };
+
+    let aiEngine;
+    const statusInfo = document.getElementById('status-info');
+    const userAction = document.getElementById('user-action');
+    const sendAction = document.getElementById('send-action');
+
+    async function ligarMotorIA() {
+      try {
+        statusInfo.innerText = "Baixando inteligência artificial para o navegador (Apenas na primeira vez)...";
+        
+        aiEngine = await pipeline('text-generation', 'Xenova/Qwen1.5-0.5B-Chat', {
+          progress_callback: (prog) => {
+            if (prog.status === 'downloading') {
+              statusInfo.innerText = `Baixando IA: ${Math.round(prog.loaded / 1024 / 1024)}MB guardados no cache...`;
+            } else if (prog.status === 'ready') {
+              statusInfo.innerText = "Organizando memórias locais...";
+            }
+          }
+        });
+
+        statusInfo.innerText = "🟢 Sistema Pronto e 100% Offline!";
+        statusInfo.style.color = "#198754";
+        userAction.disabled = false;
+        sendAction.disabled = false;
+        atualizarPainelLateral();
+      } catch (e) {
+        statusInfo.innerText = "⚠️ Falha ao ligar o motor. Verifique a internet na primeira inicialização.";
+        console.error(e);
+      }
+    }
+
+    function extrairDadosAutomatico(txt) {
+      const termos = ['nome', 'sou', 'encontrei', 'matei', 'consegui', 'arma', 'lvl', 'nível'];
+      let alvo = txt.toLowerCase();
+      termos.forEach(t => {
+        if (alvo.includes(t) && !localState.memoria.includes(txt)) {
+          if (localState.memoria.length >= 10) localState.memoria.shift();
+          localState.memoria.push(txt);
+        }
+      });
+    }
+
+    window.executarAcao = async function() {
+      const textoStr = userAction.value.trim();
+      if (!textoStr) return;
+
+      userAction.value = '';
+      mostrarNaTela('user-entry', textoStr);
+      localState.chat.push({ type: 'user', text: textoStr });
+      gravarNoCache();
+
+      statusInfo.innerText = "🧠 Pensando nos desdobramentos...";
+
+      let memInjetada = localState.memoria.join(" | ");
+      let promptMontado = `<|im_start|>system\nVocê é um mestre de RPG imersivo e sem filtros. Fatos recordados: ${memInjetada || "Nenhum"}. Narre a história continuando a ação do jogador.<|im_end|>\n<|im_start|>user\n${textoStr}<|im_end|>\n<|im_start|>assistant\n`;
+
+      try {
+        const resposta = await aiEngine(promptMontado, {
+          max_new_tokens: 130,
+          temperature: 0.7,
+          repetition_penalty: 1.1
+        });
+
+        let filtrado = resposta.generated_text.split('<|im_start|>assistant\n') || resposta.generated_text;
+        filtrado = filtrado.replace('<|im_end|>', '').trim();
+
+        mostrarNaTela('ai-entry', filtrado);
+        localState.chat.push({ type: 'ai', text: filtrado });
+        
+        extrairDadosAutomatico(textoStr);
+        gravarNoCache();
+        atualizarPainelLateral();
+        statusInfo.innerText = "🟢 Sistema Pronto e 100% Offline!";
+      } catch (err) {
+        mostrarNaTela('ai-entry', "Ocorreu um atraso na resposta do processador.");
+        statusInfo.innerText = "🟢 Sistema Pronto e 100% Offline!";
+      }
+    };
+
+    function mostrarNaTela(estilo, txt) {
+      const stream = document.getElementById('text-stream');
+      const bloco = document.createElement('div');
+      bloco.className = `text-block ${estilo}`;
+      bloco.innerText = txt;
+      stream.appendChild(bloco);
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    function gravarNoCache() {
+      localStorage.setItem('rpg_777_save', JSON.stringify(localState));
+    }
+
+    function atualizarPainelLateral() {
+      const lista = document.getElementById('memory-list');
+      lista.innerHTML = '';
+      if (localState.memoria.length === 0) {
+        lista.innerHTML = '<li>Nenhum registro na mente limpa ainda.</li>';
+      } else {
+        localState.memoria.forEach(m => {
+          const item = document.createElement('li');
+          item.innerText = m;
+          lista.appendChild(item);
+        });
+      }
+    }
+
+    window.backupCompleto = function() {
+      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(localState));
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.setAttribute("href", dataStr);
+      downloadAnchor.setAttribute("download", "save_777_rpg.json");
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      downloadAnchor.remove();
+    };
+
+    window.restaurarBackup = function(input) {
+      const reader = new FileReader();
+      reader.onload = function() {
+        try {
+          const res = JSON.parse(reader.result);
+          if (res.chat && res.memoria) {
+            localState = res;
+            gravarNoCache();
+            alert("Progresso e memórias 777 sincronizados!");
+            location.reload();
+          }
+        } catch (e) { alert("Falha ao ler o save."); }
+      };
+      reader.readAsText(input.files);
+    };
+
+    ligarMotorIA();
+  </script>
+</body>
+</html>
