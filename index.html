@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>RPG de IA - Crônicas 777</title>
   <style>
     body {
@@ -62,6 +62,7 @@
       border-radius: 8px;
       max-width: 80%;
       word-wrap: break-word;
+      white-space: pre-wrap;
     }
     .user-entry {
       background-color: #0b5ed7;
@@ -121,7 +122,7 @@
 <body>
 
   <div id="status-bar">
-    🔮 Conexão Mental 777: <span id="status-info">Iniciando sistema neural offline...</span>
+    🔮 Conexão Mental 777: <span id="status-info">Iniciando sistema...</span>
   </div>
 
   <div id="game-container">
@@ -145,8 +146,8 @@
     </div>
 
     <div id="narrative-screen">
-      <div id="text-stream">
-        <div class="text-block ai-entry">O portal do código 777 se abre. A IA offline está se acoplando ao cache do navegador para dar início à sua campanha sem restrições. Qual será o seu primeiro passo neste mundo?</div>
+      <div id="text-stream" aria-live="polite" aria-atomic="false">
+        <!-- mensagens serão injetadas aqui -->
       </div>
       <div id="input-bar">
         <textarea id="user-action" placeholder="Escreva o rumo da sua história aqui..." disabled></textarea>
@@ -156,108 +157,49 @@
   </div>
 
   <script type="module">
-    import { pipeline } from 'https://jsdelivr.net';
+    // Chave de storage
+    const SAVE_KEY = 'rpg_777_save';
 
-    let localState = JSON.parse(localStorage.getItem('rpg_777_save')) || {
-      chat: [{ type: 'ai', text: 'O portal do código 777 se abre. A IA offline está se acoplando ao cache do navegador para dar início à sua campanha sem restrições. Qual será o seu primeiro passo neste mundo?' }],
-      memoria: []
-    };
+    // Estado inicial (correto)
+    let localState = (function() {
+      try {
+        const saved = localStorage.getItem(SAVE_KEY);
+        if (saved) return JSON.parse(saved);
+      } catch (_) { /* ignore parse errors */ }
+      return {
+        chat: [
+          {
+            type: 'ai',
+            text: 'O portal do código 777 se abre. A IA offline está se acoplando ao cache do navegador para dar início à sua campanha sem restrições. Qual será o seu primeiro passo?'
+          }
+        ],
+        memoria: []
+      };
+    })();
 
-    let aiEngine;
+    let aiEngine = null;
     const statusInfo = document.getElementById('status-info');
     const userAction = document.getElementById('user-action');
     const sendAction = document.getElementById('send-action');
 
-    async function ligarMotorIA() {
-      try {
-        statusInfo.innerText = "Baixando inteligência artificial para o navegador (Apenas na primeira vez)...";
-        
-        aiEngine = await pipeline('text-generation', 'Xenova/Qwen1.5-0.5B-Chat', {
-          progress_callback: (prog) => {
-            if (prog.status === 'downloading') {
-              statusInfo.innerText = `Baixando IA: ${Math.round(prog.loaded / 1024 / 1024)}MB guardados no cache...`;
-            } else if (prog.status === 'ready') {
-              statusInfo.innerText = "Organizando memórias locais...";
-            }
-          }
-        });
-
-        statusInfo.innerText = "🟢 Sistema Pronto e 100% Offline!";
-        statusInfo.style.color = "#198754";
-        userAction.disabled = false;
-        sendAction.disabled = false;
-        atualizarPainelLateral();
-      } catch (e) {
-        statusInfo.innerText = "⚠️ Falha ao ligar o motor. Verifique a internet na primeira inicialização.";
-        console.error(e);
-      }
-    }
-
-    function extrairDadosAutomatico(txt) {
-      const termos = ['nome', 'sou', 'encontrei', 'matei', 'consegui', 'arma', 'lvl', 'nível'];
-      let alvo = txt.toLowerCase();
-      termos.forEach(t => {
-        if (alvo.includes(t) && !localState.memoria.includes(txt)) {
-          if (localState.memoria.length >= 10) localState.memoria.shift();
-          localState.memoria.push(txt);
-        }
-      });
-    }
-
-    window.executarAcao = async function() {
-      const textoStr = userAction.value.trim();
-      if (!textoStr) return;
-
-      userAction.value = '';
-      mostrarNaTela('user-entry', textoStr);
-      localState.chat.push({ type: 'user', text: textoStr });
-      gravarNoCache();
-
-      statusInfo.innerText = "🧠 Pensando nos desdobramentos...";
-
-      let memInjetada = localState.memoria.join(" | ");
-      let promptMontado = `<|im_start|>system\nVocê é um mestre de RPG imersivo e sem filtros. Fatos recordados: ${memInjetada || "Nenhum"}. Narre a história continuando a ação do jogador.<|im_end|>\n<|im_start|>user\n${textoStr}<|im_end|>\n<|im_start|>assistant\n`;
-
-      try {
-        const resposta = await aiEngine(promptMontado, {
-          max_new_tokens: 130,
-          temperature: 0.7,
-          repetition_penalty: 1.1
-        });
-
-        let filtrado = resposta.generated_text.split('<|im_start|>assistant\n') || resposta.generated_text;
-        filtrado = filtrado.replace('<|im_end|>', '').trim();
-
-        mostrarNaTela('ai-entry', filtrado);
-        localState.chat.push({ type: 'ai', text: filtrado });
-        
-        extrairDadosAutomatico(textoStr);
-        gravarNoCache();
-        atualizarPainelLateral();
-        statusInfo.innerText = "🟢 Sistema Pronto e 100% Offline!";
-      } catch (err) {
-        mostrarNaTela('ai-entry', "Ocorreu um atraso na resposta do processador.");
-        statusInfo.innerText = "🟢 Sistema Pronto e 100% Offline!";
-      }
-    };
-
-    function mostrarNaTela(estilo, txt) {
+    // Renderiza chat a partir do estado
+    function renderChat() {
       const stream = document.getElementById('text-stream');
-      const bloco = document.createElement('div');
-      bloco.className = `text-block ${estilo}`;
-      bloco.innerText = txt;
-      stream.appendChild(bloco);
+      stream.innerHTML = '';
+      localState.chat.forEach(m => {
+        const bloco = document.createElement('div');
+        bloco.className = 'text-block ' + (m.type === 'user' ? 'user-entry' : 'ai-entry');
+        bloco.innerText = m.text;
+        stream.appendChild(bloco);
+      });
       stream.scrollTop = stream.scrollHeight;
     }
 
-    function gravarNoCache() {
-      localStorage.setItem('rpg_777_save', JSON.stringify(localState));
-    }
-
+    // Atualiza painel lateral (memórias)
     function atualizarPainelLateral() {
       const lista = document.getElementById('memory-list');
       lista.innerHTML = '';
-      if (localState.memoria.length === 0) {
+      if (!localState.memoria || localState.memoria.length === 0) {
         lista.innerHTML = '<li>Nenhum registro na mente limpa ainda.</li>';
       } else {
         localState.memoria.forEach(m => {
@@ -268,8 +210,49 @@
       }
     }
 
+    // Salva no localStorage
+    function gravarNoCache() {
+      try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(localState));
+      } catch (e) {
+        console.error('Falha ao salvar no localStorage', e);
+      }
+    }
+
+    // Extrai dados simples da entrada do jogador para memória
+    function extrairDadosAutomatico(txt) {
+      if (!txt) return;
+      const termos = ['nome','sou','encontrei','matei','consegui','arma','lvl','nível','level','level:'];
+      const alvo = txt.toLowerCase();
+      for (const t of termos) {
+        if (alvo.includes(t)) {
+          // evita duplicata exata
+          if (!localState.memoria.includes(txt)) {
+            if (!localState.memoria) localState.memoria = [];
+            if (localState.memoria.length >= 12) localState.memoria.shift();
+            localState.memoria.push(txt);
+            gravarNoCache();
+            atualizarPainelLateral();
+          }
+          break;
+        }
+      }
+    }
+
+    // Mostrar mensagem na tela (usa estado visual, não altera state principal)
+    function mostrarNaTela(estilo, txt) {
+      const stream = document.getElementById('text-stream');
+      const bloco = document.createElement('div');
+      bloco.className = `text-block ${estilo}`;
+      bloco.innerText = txt;
+      stream.appendChild(bloco);
+      stream.scrollTop = stream.scrollHeight;
+    }
+
+    // Backup / download do estado
     window.backupCompleto = function() {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(localState));
+      const data = JSON.stringify(localState, null, 2);
+      const dataStr = "data:application/json;charset=utf-8," + encodeURIComponent(data);
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute("href", dataStr);
       downloadAnchor.setAttribute("download", "save_777_rpg.json");
@@ -278,22 +261,146 @@
       downloadAnchor.remove();
     };
 
+    // Restaurar backup (corrigido para usar files[0])
     window.restaurarBackup = function(input) {
+      if (!input.files || input.files.length === 0) {
+        alert('Nenhum arquivo selecionado.');
+        return;
+      }
       const reader = new FileReader();
       reader.onload = function() {
         try {
           const res = JSON.parse(reader.result);
-          if (res.chat && res.memoria) {
+          if (res && Array.isArray(res.chat) && res.memoria) {
             localState = res;
             gravarNoCache();
             alert("Progresso e memórias 777 sincronizados!");
             location.reload();
+          } else {
+            alert("Arquivo de save inválido.");
           }
-        } catch (e) { alert("Falha ao ler o save."); }
+        } catch (e) {
+          console.error(e);
+          alert("Falha ao ler o save.");
+        }
       };
-      reader.readAsText(input.files);
+      reader.readAsText(input.files[0]);
     };
 
+    // Função para tentar carregar um pipeline de IA; em falha usa mock.
+    async function ligarMotorIA() {
+      statusInfo.innerText = "Tentando carregar motor de IA (se disponível)...";
+      // Desabilita entradas até decidir
+      userAction.disabled = true;
+      sendAction.disabled = true;
+
+      // Tenta import dinâmico de um bundle ESM conhecido (pode falhar por CORS/no módulo disponível)
+      try {
+        // Nota: este import pode não existir ou ser bloqueado pelo navegador,
+        // por isso o try/catch. O fallback mock garante que a UI funcione.
+        const CDN = 'https://cdn.jsdelivr.net/npm/@xenova/transformers/dist/transformers.min.js';
+        const mod = await import(CDN);
+        if (mod && typeof mod.pipeline === 'function') {
+          statusInfo.innerText = "Baixando inteligência artificial para o navegador (Apenas na primeira vez)...";
+          const pl = await mod.pipeline('text-generation', 'Xenova/Qwen1.5-0.5B-Chat', {
+            progress_callback: (prog) => {
+              if (prog && prog.status === 'downloading') {
+                statusInfo.innerText = `Baixando IA: ${Math.round((prog.loaded || 0) / 1024 / 1024)}MB guardados no cache...`;
+              } else if (prog && prog.status === 'ready') {
+                statusInfo.innerText = "Organizando memórias locais...";
+              }
+            }
+          });
+          // pl é uma função que gera respostas
+          aiEngine = pl;
+          statusInfo.innerText = "🟢 Sistema Pronto e 100% Offline!";
+          statusInfo.style.color = "#198754";
+        } else {
+          throw new Error('módulo sem pipeline');
+        }
+      } catch (e) {
+        // Fallback: mock simples para a UI funcionar offline/sem lib
+        console.warn('Falha ao carregar pipeline externo, usando fallback mock.', e);
+        aiEngine = async function(prompt, opts) {
+          // Resposta mock: tenta ser útil, mas curta
+          const entrada = (typeof prompt === 'string') ? prompt : (prompt?.toString?.() || '');
+          const resumo = entrada.length > 140 ? entrada.slice(0, 140) + '...' : entrada;
+          return { generated_text: `Mestre 777 (modo offline): ${resumo}\n\n(O motor real não foi carregado. Conecte-se e tenha o pacote de IA para respostas mais ricas.)` };
+        };
+        statusInfo.innerText = "⚠️ Motor de IA não disponível — funcionando em modo offline (mock).";
+        statusInfo.style.color = "#ffb74d";
+      } finally {
+        userAction.disabled = false;
+        sendAction.disabled = false;
+      }
+    }
+
+    // Executa a ação do jogador e pede a continuação para a IA ou mock
+    window.executarAcao = async function() {
+      const textoStr = userAction.value.trim();
+      if (!textoStr) return;
+      userAction.value = '';
+      mostrarNaTela('user-entry', textoStr);
+      localState.chat.push({ type: 'user', text: textoStr });
+      gravarNoCache();
+
+      statusInfo.innerText = "🧠 Pensando nos desdobramentos...";
+      sendAction.disabled = true;
+      userAction.disabled = true;
+
+      const memInjetada = (localState.memoria && localState.memoria.length) ? localState.memoria.join(" | ") : "Nenhum";
+      const promptMontado = `Você é um mestre de RPG imersivo e sem filtros. Fatos recordados: ${memInjetada}. Narre a história continuando a ação do jogador abaixo e adicione detalhes atmosféricos, consequências e próximos desafios.\n\nAção do jogador: "${textoStr}"\n\nResposta:`;
+
+      try {
+        const resposta = await aiEngine(promptMontado, {
+          max_new_tokens: 200,
+          temperature: 0.7,
+          repetition_penalty: 1.1
+        });
+
+        // parsing robusto
+        let textoGerado = '';
+        if (!resposta && resposta !== '') {
+          textoGerado = 'O motor não retornou texto.';
+        } else if (typeof resposta === 'string') {
+          textoGerado = resposta;
+        } else if (Array.isArray(resposta)) {
+          // array de resultados
+          textoGerado = resposta[0]?.generated_text || JSON.stringify(resposta);
+        } else if (typeof resposta === 'object') {
+          textoGerado = resposta.generated_text || resposta.text || JSON.stringify(resposta);
+        } else {
+          textoGerado = String(resposta);
+        }
+
+        // Limpeza de tokens comuns (caso a lib use <|im_start|> etc.)
+        textoGerado = textoGerado.replace(/<\|im_start\|>.*?\n/gs, '').replace(/<\|im_end\|>/g, '').trim();
+
+        mostrarNaTela('ai-entry', textoGerado);
+        localState.chat.push({ type: 'ai', text: textoGerado });
+
+        // extrai memória a partir da ação do jogador
+        extrairDadosAutomatico(textoStr);
+        gravarNoCache();
+        atualizarPainelLateral();
+        statusInfo.innerText = "🟢 Sistema Pronto e 100% Offline!";
+        statusInfo.style.color = "#198754";
+      } catch (err) {
+        console.error('Erro ao gerar resposta:', err);
+        mostrarNaTela('ai-entry', "Ocorreu um atraso na resposta do processador.");
+        statusInfo.innerText = "⚠️ Erro ao processar a resposta.";
+        statusInfo.style.color = "#ffb74d";
+      } finally {
+        sendAction.disabled = false;
+        userAction.disabled = false;
+      }
+    };
+
+    // Inicialização visual
+    renderChat();
+    atualizarPainelLateral();
+
+    // Inicia o motor (assíncrono)
     ligarMotorIA();
   </script>
 </body>
